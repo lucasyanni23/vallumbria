@@ -136,9 +136,21 @@
       "auth/wrong-password": "E-mail ou senha incorretos.", "auth/user-not-found": "Não encontramos uma conta com esse e-mail.",
       "auth/too-many-requests": "Muitas tentativas seguidas. Espere alguns minutos e tente de novo.",
       "auth/network-request-failed": "Sem conexão. Verifique sua internet e tente de novo.",
-      "permission-denied": "Ação não permitida. Atualize a página e tente de novo.", "unavailable": "Sem conexão com o servidor. Tente de novo em instantes."
+      "permission-denied": "Ação não permitida. Atualize a página e tente de novo.", "unavailable": "Sem conexão com o servidor. Tente de novo em instantes.",
+      "auth/operation-not-allowed": "O login por e-mail e senha ainda não foi ativado no Firebase. O mestre precisa ativar em Authentication → Método de login → E-mail/senha.",
+      "auth/configuration-not-found": "O login ainda não foi configurado no Firebase. O mestre precisa abrir Authentication, clicar em Vamos começar e ativar E-mail/senha.",
+      "auth/unauthorized-domain": "Este endereço não está autorizado no Firebase. O mestre precisa adicioná-lo em Authentication → Configurações → Domínios autorizados.",
+      "auth/admin-restricted-operation": "O cadastro de contas está bloqueado no Firebase. O mestre precisa liberar em Authentication → Configurações → Ações do usuário.",
+      "failed-precondition": "O banco de dados ainda não foi criado no Firebase. O mestre precisa criar o Firestore Database.",
+      "not-found": "O banco de dados ainda não foi criado no Firebase. O mestre precisa criar o Firestore Database."
     };
-    return (e && e.friendly) ? e.message : (map[(e && e.code) || ""] || "Algo deu errado. Tente de novo.");
+    if (e && e.friendly) return e.message;
+    const code = (e && e.code) || "";
+    if (map[code]) return map[code];
+    const raw = String((e && e.message) || "");
+    if (/CONFIGURATION_NOT_FOUND/i.test(raw)) return map["auth/configuration-not-found"];
+    if (/OPERATION_NOT_ALLOWED/i.test(raw)) return map["auth/operation-not-allowed"];
+    return "Algo deu errado" + (code ? " (" + code + ")" : raw ? " (" + raw.slice(0, 120) + ")" : "") + ". Tente de novo.";
   }
   function fbStore(db) {
     const ref = (p) => db.doc(p);
@@ -241,7 +253,8 @@
     signUp: wrap(async (email, pass, n, contato) => {
       if (!nick(n)) fail("Escolha um nome de jogador.");
       const uid = await auth.signUp(email, pass);
-      await store.batch([{ path: "perfis/" + uid, data: { nick: nick(n), contato: txt(contato, 80), criadoEm: now() } }]);
+      try { await store.batch([{ path: "perfis/" + uid, data: { nick: nick(n), contato: txt(contato, 80), criadoEm: now() } }]); }
+      catch (e) { console.error(e); fail("Sua conta foi criada, mas o perfil não foi salvo: " + fbMessage(e) + " Depois de resolver, use Editar perfil no Painel."); }
       if (user && user.uid === uid) { user.nick = nick(n); emit(); }
     }),
     signIn: wrap((email, pass) => auth.signIn(email, pass)),
