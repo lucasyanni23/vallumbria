@@ -17,5 +17,12 @@ window.VB_CONFIG = {
   //   messagingSenderId: "1234567890",
   //   appId: "1:1234567890:web:abc123"
   // },
-  firebase: null
+  firebase: {
+    apiKey: "AIzaSyDsPkQtlJdwa5JxM4mnpXyw9peQeLItENo",
+    authDomain: "vallumbria.firebaseapp.com",
+    projectId: "vallumbria",
+    storageBucket: "vallumbria.firebasestorage.app",
+    messagingSenderId: "507120075377",
+    appId: "1:507120075377:web:de18d775c797fdb55011d0"
+  }
 };
