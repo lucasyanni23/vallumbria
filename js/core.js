@@ -7,12 +7,12 @@
   const D = window.VB_DATA, B = window.VB, S = B.state;
   const view = document.getElementById("view");
   const $ = (s, r) => (r || document).querySelector(s);
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const esc = (s) => String(s == null ? "" : s).replace(/<\/?(b|strong|i|em|u|br)\s*\/?>/gi, (m) => (/br/i.test(m) ? " " : "")).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const clone = (o) => JSON.parse(JSON.stringify(o == null ? null : o));
 
   const ui = {
     page: null, param: null, fEsp: "todas", fSt: "todas", fTipo: "todos",
-    confirmSlot: null, pendingSlot: null, openSlot: null,
+    confirmSlot: null, pendingSlot: null, openSlot: null, em: false, inl: {}, inlN: 0,
     pnTab: "entrar", tab: "ficha", mtab: "fichas", exp: {}, confirm: null, editProfile: false,
     d: {}, dk: {}, ed: { sec: "site", open: null, dirty: false, next: null }, stale: false
   };
@@ -20,6 +20,8 @@
 
   /* ---------------- conteúdo ---------------- */
   function C(sec) {
+    if (ui.inl && ui.inl[sec] !== undefined) return sec === "site" ? Object.assign({}, D.site, ui.inl.site) : ui.inl[sec];
+    if (sec === "textos" || sec === "layout" || sec === "estilos") return S.pub[sec] || {};
     if (sec === "mercado") return S.mercado || D.mercado;
     if (sec === "notas") return S.notas || { texto: "" };
     const v = S.pub[sec];
@@ -31,7 +33,7 @@
     C("especies").forEach(e => { esp[e.id] = e; });
     C("grupos").forEach(g => { grp[g.id] = g; });
     C("locais").forEach(l => { loc[l.id] = l; });
-    const slots = C("vagas").map(v => { const g = grp[v.grupo] || { nome: "", especie: "" }; const e = esp[g.especie] || { nome: "", cor: "#B89B72", id: "" }; return Object.assign({}, v, { g, e, cor: e.cor || "#B89B72" }); });
+    const slots = C("vagas").map((v, idx) => { const g = grp[v.grupo] || { nome: "", especie: "" }; const e = esp[g.especie] || { nome: "", cor: "#B89B72", id: "" }; return Object.assign({}, v, { g, e, idx, cor: e.cor || "#B89B72" }); });
     slots.forEach(s => { slot[s.id] = s; });
     return { esp, grp, loc, slot, slots, site: C("site") };
   }
@@ -149,9 +151,9 @@
     return `<article class="slot" style="--fac:${esc(slot.cor)}">${slotImg(slot, s.st, r)}
       <div class="slot-body">
         <p class="slot-role">${esc(slot.e.nome)} · ${esc(slot.g.nome)}</p>
-        <h3 class="slot-name">${esc(charName(slot, r))}</h3>
-        ${named ? `<p class="small" style="margin:0">${esc(slot.papel)}${fc}</p>` : ""}
-        <p class="slot-desc">${esc(slot.desc)}</p>
+        ${named && !(r && r.status === "aprovada" && r.ficha && r.ficha.nome) ? A.E("vagas." + slot.idx + ".nome", slot.nome, "h3", "slot-name") : named ? `<h3 class="slot-name">${esc(charName(slot, r))}</h3>` : A.E("vagas." + slot.idx + ".papel", slot.papel, "h3", "slot-name")}
+        ${named ? `<p class="small" style="margin:0">${A.E("vagas." + slot.idx + ".papel", slot.papel)}${fc}</p>` : ""}
+        ${A.E("vagas." + slot.idx + ".desc", slot.desc, "p", "slot-desc")}
         <p class="slot-meta"><span class="pill ${cls}">${lbl}</span><span>${meta}</span></p>
         <div class="slot-actions">${actions}</div>
       </div></article>`;
@@ -220,6 +222,8 @@
     $("#auth-slot").innerHTML = u ? `<a class="chip-user" href="#painel" aria-label="Seu painel"><span class="avatar">${initials(u.nick || u.email)}</span><span>${esc(u.nick || "Painel")}</span></a>` : `<a class="btn btn-ghost btn-sm" href="#painel">Entrar</a>`;
     $("#demo-bar").hidden = B.mode !== "demo";
     document.title = site.nome;
+    if (A.emBar) A.emBar();
+    document.body.classList.toggle("em", !!ui.em);
     hydrate($("#logo"));
     if (!$("#drawer").hidden) $("#drawer").innerHTML = `<div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu"><button class="btn btn-ghost btn-sm" style="align-self:flex-end;margin-bottom:8px" type="button" data-act="drawer-close">Fechar</button>${links(' data-act="drawer-close"')}</div>`;
   }
@@ -249,7 +253,7 @@
     if (r.anchor) requestAnimationFrame(() => { const el = document.getElementById(r.anchor); if (el) el.scrollIntoView({ block: "start" }); });
     else if (changed) { window.scrollTo(0, 0); try { view.focus({ preventScroll: true }); } catch (e) {} }
   }
-  const typing = () => { const a = document.activeElement; return !!a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "checkbox" && a.type !== "file" && (view.contains(a)); };
+  const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) && a.type !== "checkbox" && a.type !== "file" && (view.contains(a)); };
   function refresh() { if (!ui.page) return; if (typing()) { ui.stale = true; return; } render(); }
 
   /* ---------------- reservas ---------------- */
@@ -326,7 +330,7 @@
       try {
         const url = await compress(el.files[0], foto ? 900 : 1400, foto ? 800000 : 900000);
         const ref = foto ? await B.saveFoto(url) : await B.admin.saveImage(url);
-        setPath(ui.d, el.dataset.up, ref);
+        if (el.dataset.up.charAt(0) === "@") A.inlSet(el.dataset.up.slice(1), ref); else setPath(ui.d, el.dataset.up, ref);
         if (el.dataset.up.indexOf("ed.") === 0 && A.edDirty) A.edDirty();
         toast("Foto enviada."); render();
       } catch (err) { toast((err && err.message) || "Não foi possível enviar a foto.", true); }
